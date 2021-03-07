@@ -40,6 +40,11 @@ int buttonStateLeft = LOW;
 int buttonStateSelect = LOW;
 int buttonStateRight = LOW;
 
+// --------- INTERVALOMETER -----------------------
+int timeout = 30;
+int timeoutVal = 30;
+bool isIntervalRunning = false;
+
 // --------- MENU ---------------------------------
 const int numOfScreens = 2;
 int currentScreen = 0;
@@ -53,6 +58,17 @@ void callback()
   // digitalWrite(10, digitalRead(10) ^ 1);
   // Serial.println("Interupt");
   counter++;
+
+  if(isIntervalRunning)
+  {
+    timeoutVal--;
+    if (timeoutVal < 0)
+    {
+      timeoutVal = timeout;
+    }
+  }
+
+  Serial.println(isIntervalRunning);
 }
 
 void focusStop()
@@ -111,6 +127,8 @@ void setup()
   Timer1.initialize(1000000);
   Timer1.pwm(9, 512);
   Timer1.attachInterrupt(callback);
+
+  isIntervalRunning = false;
 }
 
 void focusPage()
@@ -146,34 +164,40 @@ void focusPage()
 
 void intervPage()
 {
-
-  myOLED.print("** INTERV **", CENTER, 0); // MANI MENU
+  myOLED.print("** INT/EXPOSURE **", CENTER, 0); // MANI MENU
 
   // LEFT
   if (buttonStateLeft == LOW)
   {
+    timeout--;
+    timeoutVal = timeout;
     myOLED.invertText(true);
-    myOLED.print("<<--", 0, 20);
+    myOLED.print("-", 0, 20);
     myOLED.invertText(false);
   }
   else
   {
     myOLED.invertText(false);
-    myOLED.print("<<--", 0, 20);
+    myOLED.print("-", 0, 20);
+    
   }
 
   //RIGHT
   if (buttonStateRight == LOW)
   {
+    timeout++;
+    timeoutVal = timeout;
     myOLED.invertText(true);
-    myOLED.print("-->>", 105, 20);
+    myOLED.print("+", 105, 20);
     myOLED.invertText(false);
   }
   else
   {
     myOLED.invertText(false);
-    myOLED.print("-->>", 105, 20);
+    myOLED.print("+", 105, 20);
   }
+  
+  myOLED.printNumI(timeoutVal, CENTER, 20);
 }
 
 void loop()
@@ -182,29 +206,42 @@ void loop()
   buttonStateSelect = digitalRead(buttonPinSelect);
   buttonStateRight = digitalRead(buttonPinRight);
 
-  if(lastState == HIGH && buttonStateSelect == LOW) {        // button is pressed
+  if (lastState == HIGH && buttonStateSelect == LOW)
+  { // button is pressed
     pressedTime = millis();
     isPressing = true;
     isLongDetected = false;
-  } else if(lastState == LOW && buttonStateSelect == HIGH) { // button is released
+  }
+  else if (lastState == LOW && buttonStateSelect == HIGH)
+  { // button is released
     isPressing = false;
     releasedTime = millis();
 
     long pressDuration = releasedTime - pressedTime;
 
-    if( pressDuration < SHORT_PRESS_TIME )
+    if (pressDuration < SHORT_PRESS_TIME)
       Serial.println("A short press is detected");
+    if (currentScreen == 1)
+    {
+      isIntervalRunning = !isIntervalRunning;
+      if(!isIntervalRunning)
+      {
+        timeoutVal = timeout;
+      }
+    }
   }
 
-  if(isPressing == true && isLongDetected == false) {
+  if (isPressing == true && isLongDetected == false)
+  {
     long pressDuration = millis() - pressedTime;
 
-    if( pressDuration > LONG_PRESS_TIME ) {
+    if (pressDuration > LONG_PRESS_TIME)
+    {
       Serial.println("A long press is detected");
       isLongDetected = true;
-      
+
       currentScreen++;
-      if(currentScreen > 1)
+      if (currentScreen > 1)
       {
         currentScreen = 0;
       }
@@ -214,10 +251,9 @@ void loop()
   // save the the last state
   lastState = buttonStateSelect;
 
-
   // DRAW SCREEN
   myOLED.clrScr();
-  
+
   if (currentScreen == 0)
   {
     focusPage();
@@ -227,13 +263,16 @@ void loop()
     intervPage();
   }
 
-  if (counter % 2 == 0)
+  if (isIntervalRunning)
   {
-    myOLED.drawRect(0, 0, 2, 2);
-  }
-  else
-  {
-    myOLED.clrRect(0, 0, 2, 2);
+    if (counter % 2 == 0)
+    {
+      myOLED.drawRect(0, 0, 2, 2);
+    }
+    else
+    {
+      myOLED.clrRect(0, 0, 2, 2);
+    }
   }
 
   myOLED.update();
