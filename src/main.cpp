@@ -1,8 +1,6 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <Wire.h>
-// #include <Adafruit_GFX.h>
-// #include <Adafruit_SSD1306.h>
 #include <CheapStepper.h>
 #include "TimerOne.h"
 #include <OLED_I2C.h>
@@ -25,26 +23,36 @@ int stepsDelayMicrosconds = stepsDelayMicroscondsDecimal;
 bool machineState[] = {false, true}; //machineState[power, direction] --> [Off, Counter-Clockwise]
 
 // ---------- Buttons ----------------------------
-const int buttonPinLeft = 2; // Left
-const int buttonPinSelect = 3; // Select
-const int buttonPinRight = 4; // Right
+const int SHORT_PRESS_TIME = 250;
+const int LONG_PRESS_TIME = 150;
 
-int buttonStateLeft = 0; 
-int buttonStateSelect = 0;
-int buttonStateRight = 0;
+int lastState = LOW;
+unsigned long pressedTime = 0;
+unsigned long releasedTime = 0;
+bool isPressing = false;
+bool isLongDetected = false;
+
+const int buttonPinLeft = 2;   // Left
+const int buttonPinSelect = 3; // Select
+const int buttonPinRight = 4;  // Right
+
+int buttonStateLeft = LOW;
+int buttonStateSelect = LOW;
+int buttonStateRight = LOW;
 
 // --------- MENU ---------------------------------
 const int numOfScreens = 2;
 int currentScreen = 0;
 int selected = 0;
 
-String screens[numOfScreens] = {"FOCUS", ""};
+int counter = 0;
 
 // --------- FUNCTIONS ----------------------------
 void callback()
 {
   // digitalWrite(10, digitalRead(10) ^ 1);
-  Serial.println("Interupt");
+  // Serial.println("Interupt");
+  counter++;
 }
 
 void focusStop()
@@ -92,8 +100,8 @@ void setup()
   myOLED.print("Intervalometer", CENTER, 20);
   myOLED.update();
 
-  delay(500);
-  
+  delay(1000);
+
   // Buttons
   pinMode(buttonPinLeft, INPUT_PULLUP);
   pinMode(buttonPinSelect, INPUT_PULLUP);
@@ -105,33 +113,128 @@ void setup()
   Timer1.attachInterrupt(callback);
 }
 
+void focusPage()
+{
+  myOLED.print("** FOCUS **", CENTER, 0);
+
+  // LEFT
+  if (buttonStateLeft == LOW)
+  {
+    myOLED.invertText(true);
+    myOLED.print("<<--", 0, 20);
+    myOLED.invertText(false);
+  }
+  else
+  {
+    myOLED.invertText(false);
+    myOLED.print("<<--", 0, 20);
+  }
+
+  //RIGHT
+  if (buttonStateRight == LOW)
+  {
+    myOLED.invertText(true);
+    myOLED.print("-->>", 105, 20);
+    myOLED.invertText(false);
+  }
+  else
+  {
+    myOLED.invertText(false);
+    myOLED.print("-->>", 105, 20);
+  }
+}
+
+void intervPage()
+{
+
+  myOLED.print("** INTERV **", CENTER, 0); // MANI MENU
+
+  // LEFT
+  if (buttonStateLeft == LOW)
+  {
+    myOLED.invertText(true);
+    myOLED.print("<<--", 0, 20);
+    myOLED.invertText(false);
+  }
+  else
+  {
+    myOLED.invertText(false);
+    myOLED.print("<<--", 0, 20);
+  }
+
+  //RIGHT
+  if (buttonStateRight == LOW)
+  {
+    myOLED.invertText(true);
+    myOLED.print("-->>", 105, 20);
+    myOLED.invertText(false);
+  }
+  else
+  {
+    myOLED.invertText(false);
+    myOLED.print("-->>", 105, 20);
+  }
+}
+
 void loop()
 {
   buttonStateLeft = digitalRead(buttonPinLeft);
   buttonStateSelect = digitalRead(buttonPinSelect);
   buttonStateRight = digitalRead(buttonPinRight);
 
-   if(buttonStateLeft == LOW){
-     Serial.print("Left");
+  if(lastState == HIGH && buttonStateSelect == LOW) {        // button is pressed
+    pressedTime = millis();
+    isPressing = true;
+    isLongDetected = false;
+  } else if(lastState == LOW && buttonStateSelect == HIGH) { // button is released
+    isPressing = false;
+    releasedTime = millis();
 
-     myOLED.clrScr();
-     myOLED.print("Left", CENTER, 0);
-     myOLED.update();
-   }
+    long pressDuration = releasedTime - pressedTime;
 
-   if(buttonStateSelect == LOW){
-     Serial.print("Select");
+    if( pressDuration < SHORT_PRESS_TIME )
+      Serial.println("A short press is detected");
+  }
 
-     myOLED.clrScr();
-     myOLED.print("Select", CENTER, 0);
-     myOLED.update();
-   }
+  if(isPressing == true && isLongDetected == false) {
+    long pressDuration = millis() - pressedTime;
 
-   if(buttonStateRight == LOW){
-     Serial.print("Right");
+    if( pressDuration > LONG_PRESS_TIME ) {
+      Serial.println("A long press is detected");
+      isLongDetected = true;
+      
+      currentScreen++;
+      if(currentScreen > 1)
+      {
+        currentScreen = 0;
+      }
+    }
+  }
 
-     myOLED.clrScr();
-     myOLED.print("Right", CENTER, 0);
-     myOLED.update();
-   }
+  // save the the last state
+  lastState = buttonStateSelect;
+
+
+  // DRAW SCREEN
+  myOLED.clrScr();
+  
+  if (currentScreen == 0)
+  {
+    focusPage();
+  }
+  if (currentScreen == 1)
+  {
+    intervPage();
+  }
+
+  if (counter % 2 == 0)
+  {
+    myOLED.drawRect(0, 0, 2, 2);
+  }
+  else
+  {
+    myOLED.clrRect(0, 0, 2, 2);
+  }
+
+  myOLED.update();
 }
